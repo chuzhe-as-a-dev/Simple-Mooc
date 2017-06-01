@@ -10,8 +10,10 @@ STUDENT_COURSEWARE_VIEW_PER_OPEN_COURSE_VIEW = 2
 
 
 class simulator:
-    def __init__(self, host="localhost", user="db_course", passwd="0000", db="SimpleMOOC", week_num=52):
+    def __init__(self, host="localhost", user="db_course", passwd="0000", db="SimpleMOOC", week_num=52, sql_opt=False):
         self.week_num = week_num
+        self.db = db
+        self.sql_opt = sql_opt
         self.connect = MySQLdb.connect(host=host, user=user, passwd=passwd, db=db)
         self.student_login_timer = 0.0
         self.view_open_course_timer = 0.0
@@ -69,15 +71,23 @@ class simulator:
             todo()
 
         # show result
-        print "student_login_per_1000_times: %.6fs" % (self.student_login_timer / self.student_login_count * 1000)
-        print "view_open_course_per_1000_times: %.6fs" % (
-            self.view_open_course_timer / self.view_open_course_count * 1000)
-        print "view_courseware_per_1000_times: %.6fs" % (self.view_courseware_timer / self.view_courseware_count * 1000)
-        print "teacher_login_per_1000_times: %.6fs" % (self.teacher_login_timer / self.teacher_login_count * 1000)
-        print "update_courseware_per_1000_times: %.6fs" % (
-            self.update_courseware_timer / self.update_courseware_count * 1000)
-        print "view_learning_process_per_1000_times: %.6fs" % (
-            self.view_learning_process_timer / self.view_learning_process_count * 1000)
+        print "Using db: ", self.db
+        if self.student_login_count != 0:
+            print "student_login_per_1000_times\t%.6f" % (self.student_login_timer / self.student_login_count * 1000)
+        if self.view_open_course_count != 0:
+            print "view_open_course_per_1000_times\t%.6f" % (
+                self.view_open_course_timer / self.view_open_course_count * 1000)
+        if self.view_courseware_count != 0:
+            print "view_courseware_per_1000_times\t%.6f" % (
+                self.view_courseware_timer / self.view_courseware_count * 1000)
+        if self.teacher_login_count != 0:
+            print "teacher_login_per_1000_times\t%.6f" % (self.teacher_login_timer / self.teacher_login_count * 1000)
+        if self.update_courseware_count != 0:
+            print "update_courseware_per_1000_times\t%.6f" % (
+                self.update_courseware_timer / self.update_courseware_count * 1000)
+        if self.view_learning_process_count != 0:
+            print "view_learning_process_per_1000_times\t%.6f" % (
+                self.view_learning_process_timer / self.view_learning_process_count * 1000)
 
     def sim_view_courseware(self, student_id, courseware_id, courseware_type):
         self.view_courseware_count += 1
@@ -207,17 +217,20 @@ class simulator:
         self.student_login_count += 1
 
         cursor = self.connect.cursor()
+        # login and get basic information
         rand = random()
         if rand < 0.5:
             token = choice(self.student_usernames)
+            start_time = time()
+            cursor.execute(
+                "SELECT user_id FROM User LEFT JOIN File ON User.avatar_id = File.file_id WHERE username = %s",
+                (token,))
         else:
             token = choice(self.student_emails)
-        start_time = time()
-
-        # login and get basic information
-        cursor.execute(
-            "SELECT user_id FROM User LEFT JOIN File ON User.avatar_id = File.file_id WHERE username = %s OR email = %s;",
-            (token, token))
+            start_time = time()
+            cursor.execute(
+                "SELECT user_id FROM User LEFT JOIN File ON User.avatar_id = File.file_id WHERE email = %s;",
+                (token,))
         user_id = cursor.fetchone()[0]
 
         # get profile
@@ -225,7 +238,13 @@ class simulator:
         cursor.fetchone()
 
         # get open course list that the student participates in
-        cursor.execute("SELECT open_course_id FROM StudentCourse WHERE student_id = %s;", (user_id,))
+        cursor.execute("""SELECT *
+                          FROM OpenCourse
+                            JOIN Course ON (Course.course_id = OpenCourse.course_id)
+                            LEFT JOIN File ON (file_id = banner_id)
+                          WHERE open_course_id = (SELECT open_course_id
+                                                  FROM StudentCourse
+                                                  WHERE student_id = %s)""", (user_id,))
         rows = cursor.fetchall()
 
         # time it
@@ -264,6 +283,7 @@ class simulator:
                     section_id, 0, "NMB,QNMB", homework_time, homework_time, randint(0, 3), randint(2, 3),
                     randint(60, 21600), 0))
 
+
                 # time it
             self.connect.commit()
             self.update_courseware_timer += time() - start_time
@@ -282,56 +302,51 @@ class simulator:
         # view overall progress of each section
         for row in cursor.fetchall():
             section_id = row[0]
-            cursor.execute("""SELECT *
-                              FROM VideoStudyRecord
-                              WHERE video_id IN (SELECT courseware_id
-                                                 FROM Courseware
-                                                 WHERE section_id = %s);""", (section_id,))
-            # cursor.execute("""SELECT *
-            #                               FROM VideoStudyRecord
-            #                               WHERE video_id IN (SELECT courseware_id
-            #                                                  FROM Courseware
-            #                                                  WHERE section_id = %s AND courseware_type = 1);""", (section_id,))
-            cursor.fetchall()
-            cursor.execute("""SELECT *
-                              FROM DocumentStudyRecord
-                              WHERE document_id IN (SELECT courseware_id
-                                                FROM Courseware
-                                                WHERE section_id = %s);""", (section_id,))
-            # cursor.execute("""SELECT *
-            #                               FROM DocumentStudyRecord
-            #                               WHERE document_id IN (SELECT courseware_id
-            #                                                 FROM Courseware
-            #                                                 WHERE section_id = %s AND courseware_type = 2);""", (section_id,))
-            cursor.fetchall()
-            cursor.execute("""SELECT *
-                              FROM HomeworkSubmitRecord
-                              WHERE homework_id IN (SELECT courseware_id
+            if self.sql_opt:
+                cursor.execute("""SELECT *
+                                  FROM VideoStudyRecord
+                                  WHERE video_id IN (SELECT courseware_id
+                                                     FROM Courseware
+                                                     WHERE section_id = %s AND courseware_type = 1);""",
+                               (section_id,))
+                cursor.fetchall()
+                cursor.execute("""SELECT *
+                                  FROM DocumentStudyRecord
+                                  WHERE document_id IN (SELECT courseware_id
+                                                    FROM Courseware
+                                                    WHERE section_id = %s AND courseware_type = 2);""",
+                               (section_id,))
+                cursor.fetchall()
+                cursor.execute("""SELECT *
+                                  FROM HomeworkSubmitRecord
+                                  WHERE homework_id IN (SELECT courseware_id
+                                                        FROM Courseware
+                                                        WHERE section_id = %s AND courseware_type = 3);""",
+                               (section_id,))
+                cursor.fetchall()
+            else:
+                cursor.execute("""SELECT *
+                                  FROM VideoStudyRecord
+                                  WHERE video_id IN (SELECT courseware_id
+                                                     FROM Courseware
+                                                     WHERE section_id = %s);""", (section_id,))
+                cursor.fetchall()
+                cursor.execute("""SELECT *
+                                  FROM DocumentStudyRecord
+                                  WHERE document_id IN (SELECT courseware_id
                                                     FROM Courseware
                                                     WHERE section_id = %s);""", (section_id,))
-            # cursor.execute("""SELECT *
-            #                               FROM HomeworkSubmitRecord
-            #                               WHERE homework_id IN (SELECT courseware_id
-            #                                                     FROM Courseware
-            #                                                     WHERE section_id = %s AND courseware_type = 3);""", (section_id,))
-            cursor.fetchall()
+                cursor.fetchall()
+                cursor.execute("""SELECT *
+                                  FROM HomeworkSubmitRecord
+                                  WHERE homework_id IN (SELECT courseware_id
+                                                        FROM Courseware
+                                                        WHERE section_id = %s);""", (section_id,))
+                cursor.fetchall()
 
         # time it
         cursor.close()
         self.view_learning_process_timer += time() - start_time
-
-        # randomly pick a few student to view specific progress
-        # cursor.execute("SELECT student_id FROM StudentCourse WHERE open_course_id = %s;", (open_course_id))
-        # for row in sample(cursor.fetchall(), STUDENT_PROGRESS_PER_TEACHER_VIEW):
-        #     student_id = row[0]
-        #     cursor.execute("""SELECT courseware_id, courseware_type
-        #                       FROM Courseware
-        #                       WHERE section_id IN (SELECT section_id
-        #                                            FROM Section
-        #                                            WHERE chapter_id IN (SELECT chapter_id
-        #                                                                 FROM OpenCourse
-        #                                                                 WHERE open_course_id = %s))""",
-        #                    (open_course_id))
 
     def sim_teacher_login(self):
         self.teacher_login_count += 1
@@ -340,9 +355,16 @@ class simulator:
         rand = random()
         if rand < 0.5:
             token = choice(self.teacher_usernames)
+            start_time = time()
+            cursor.execute(
+                "SELECT user_id FROM User LEFT JOIN File ON User.avatar_id = File.file_id WHERE username = %s",
+                (token,))
         else:
             token = choice(self.teacher_emails)
-        start_time = time()
+            start_time = time()
+            cursor.execute(
+                "SELECT user_id FROM User LEFT JOIN File ON User.avatar_id = File.file_id WHERE email = %s;",
+                (token,))
 
         # login and get basic information
         cursor.execute(
@@ -355,22 +377,30 @@ class simulator:
         cursor.fetchone()
 
         # get open course list that the student participates in
-        cursor.execute("""SELECT * FROM OpenCourse WHERE teacher_id = %s;""", (user_id,))
-        open_courses = cursor.fetchall()
+        cursor.execute("""SELECT *
+                          FROM OpenCourse
+                            JOIN Course ON (Course.course_id = OpenCourse.course_id)
+                            LEFT JOIN File ON (file_id = banner_id)
+                          WHERE teacher_id = %s;""", (user_id,))
+        rows = cursor.fetchall()
 
         # time it
         self.teacher_login_timer += time() - start_time
 
         # operation for each open course
-        for open_course in open_courses:
-            open_course_id = open_course[0]
+        for row in rows:
+            open_course_id = row[0]
             self.sim_update_courseware(open_course_id)
             self.sim_view_learning_progress(open_course_id)
 
 
 def main():
-    sim = simulator(host="localhost", user="db_course", passwd="0000", db="SimpleMOOC", week_num=52)
-    sim.run()
+    start_time = time()
+    for i in xrange(1, 6):
+        db = "SimpleMOOC_level" + str(i)
+        sim = simulator(host="localhost", user="db_course", passwd="0000", db=db, week_num=100, sql_opt=True)
+        sim.run()
+    print "%.2f" % (time() - start_time)
 
 
 if __name__ == '__main__':
