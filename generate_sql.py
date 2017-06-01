@@ -11,26 +11,39 @@ category = [chr(x) for x in codeRange]
 options = ['A', 'B', 'C', 'D', 'AB', 'AC', 'AD', 'BC', 'BD', 'CD', 'ABC', 'ABD', 'BCD', 'ABCD']
 
 # parameters
+# courseCnt=10000
+# userCnt=10000
+# coursecategoryCnt=10000
+# opencourseCnt=10000
+# studentcourseCnt=10000
+# chapterCnt=10000
+# sectionCnt=10000
+# coursewareCnt=10000
+# fileCnt=10000
+# problemCnt=10000
+# vsrCnt=10000
+# dsrCnt=10000
+# vsriCnt=10000
+# dsriCnt=10000
+# hsrCnt=10000
+# hsriCnt=10000
+# parCnt=10000
+# end parameters
+
 courseCnt = 500
 userCnt = 10000  # std:tea = 14:1
 coursecategoryCnt = 20
 opencourseCnt = courseCnt * 3  # active = 1000
 studentcourseCnt = int(opencourseCnt * 50 / 3)
-chapterCnt = opencourseCnt * 15
+chapterCnt = opencourseCnt * 3
 sectionCnt = chapterCnt * 4
 coursewareCnt = sectionCnt * 3
 fileCnt = int(userCnt * 0.2 + courseCnt + coursewareCnt * 0.7 * 0.7)
 problemCnt = int(coursewareCnt / 3 * 4)
-vsrCnt = int(coursewareCnt / 3 * 30)
-dsrCnt = int(coursewareCnt / 3 * 30)
-vsriCnt = vsrCnt * 2
-dsriCnt = dsrCnt * 2
-hsrCnt = int(coursewareCnt / 3 * 45)
+hsrCnt = int(coursewareCnt / 3 * 3)
 hsriCnt = hsrCnt * 2
-parCnt = int(coursewareCnt / 3 * 5 * 45)
+parCnt = int(hsrCnt * 5)
 
-
-# end parameters
 
 def genRandomName(nameLength):
     global alphaRange, alphaMax
@@ -63,7 +76,6 @@ def genRandomSetMember(mySet):
 
 if __name__ == "__main__":
     fp = open("SimpleMooc_data.sql", 'w')
-    fp.write("begin;\n")
 
     print("---user---")
     emails = set()
@@ -83,13 +95,12 @@ if __name__ == "__main__":
 
     print("---teacher,student,admin---")
     for i in range(1, userCnt + 1):
-        # fixed ratio
         role = random.randint(1, 15)
 
         # admin
-        # if role == 1:
-        #   sql = "insert into admin (admin_id) values("
-        #   sql = sql + str(i) + ");\n"
+        # if role==1:
+        #    sql="insert into admin (admin_id) values("
+        #    sql=sql+str(i)+");\n"
 
         # teacher
         if role == 1:
@@ -140,9 +151,8 @@ if __name__ == "__main__":
     print("---opencourse---")
 
     for i in range(1, opencourseCnt + 1):
-        # fixed ratio
-        registry = random.randint(1, 8)
-        if registry > 1:    registry = 0
+        registry = genRandomInt(8)
+        if registry != 1: registry = 0
         course_id = genRandomInt(courseCnt)
         teacher_id = genRandomSetMember(teachers)
         sql = "insert into opencourse (open_course_id,course_id,teacher_id,allow_register) values("
@@ -152,6 +162,7 @@ if __name__ == "__main__":
     print("---studentcourse---")
 
     studentcourse = set()
+    studentcourses = {x: [] for x in range(1, opencourseCnt + 1)}
     for i in range(1, opencourseCnt + 1):
         open_course_id = genRandomInt(opencourseCnt)
         student_id = genRandomSetMember(students)
@@ -159,6 +170,7 @@ if __name__ == "__main__":
             open_course_id = genRandomInt(opencourseCnt)
             student_id = genRandomSetMember(students)
         studentcourse.add((student_id, open_course_id))
+        studentcourses[open_course_id].append(student_id)
         sql = "insert into studentcourse (open_course_id,student_id) values("
         sql = sql + str(open_course_id) + "," + str(student_id) + ");\n"
         fp.write(sql)
@@ -166,6 +178,7 @@ if __name__ == "__main__":
     print("---chapter---")
 
     chapter_orders = [0] * opencourseCnt
+    chaptercourses = [-1]
     for i in range(1, chapterCnt + 1):
         title = genRandomName(16)
         open_course_id = genRandomInt(opencourseCnt)
@@ -173,11 +186,13 @@ if __name__ == "__main__":
         sql = "insert into chapter (chapter_id,open_course_id,display_order,chapter_title) values("
         sql = sql + str(i) + "," + str(open_course_id) + "," + str(display_order) + "," + title + ");\n"
         fp.write(sql)
+        chaptercourses.append(open_course_id)
     # print(chapter_orders)
 
     print("---section---")
 
     section_orders = [0] * chapterCnt
+    sectionchapters = [-1]
     for i in range(1, sectionCnt + 1):
         title = genRandomName(16)
         chapter_id = genRandomInt(chapterCnt)
@@ -185,11 +200,14 @@ if __name__ == "__main__":
         sql = "insert into section (section_id, chapter_id, display_order,section_title) values("
         sql = sql + str(i) + "," + str(chapter_id) + "," + str(display_order) + "," + title + ");\n"
         fp.write(sql)
+        sectionchapters.append(chapter_id)
     # print(section_orders)
 
     print("---courseware---")
 
     courseware_orders = [0] * sectionCnt
+    coursewaresections = [-1]
+    coursewaretype = [-1]
     for i in range(1, coursewareCnt + 1):
         title = genRandomName(16)
         courseware_type = random.randint(1, 3)
@@ -199,7 +217,9 @@ if __name__ == "__main__":
         sql = sql + str(i) + "," + str(section_id) + "," + str(display_order) + "," + str(
             courseware_type) + "," + title + ");\n"
         fp.write(sql)
-        # print(courseware_orders)
+        coursewaresections.append(section_id)
+        coursewaretype.append(courseware_type)
+    # print(courseware_orders)
 
     print("---file---")
 
@@ -215,7 +235,7 @@ if __name__ == "__main__":
     documents = []
     homeworks = []
     for i in range(1, coursewareCnt + 1):
-        filetype = random.randint(1, 3)
+        filetype = coursewaretype[i]
         # video
         if filetype == 1:
             file_id = genRandomInt(fileCnt)
@@ -261,35 +281,58 @@ if __name__ == "__main__":
     # print(problem_orders)
 
     print("---VideoStudyRecord---")
-    videostudent = set()
-    for i in range(1, vsrCnt + 1):
-        video_id = genRandomSetMember(videos)
-        student_id = genRandomSetMember(students)
-        while (video_id, student_id) in videostudent:
-            video_id = genRandomSetMember(videos)
-            student_id = genRandomSetMember(students)
-        videostudent.add((video_id, student_id))
-        sql = "insert into videostudyrecord (vsr_id, video_id, student_id) values("
-        sql = sql + str(i) + "," + str(video_id) + "," + str(student_id) + ");\n"
-        fp.write(sql)
+
+    # print (studentcourses)
+    # print (chaptercourses)
+    # print (sectionchapters)
+    # print (coursewaresections)
+
+    videoset = set()
+    vsrCnt = 1
+    for i in range(len(videos)):
+        video_id = videos[i]
+        candidatestudents = studentcourses[chaptercourses[sectionchapters[coursewaresections[video_id]]]]
+        if candidatestudents == []:
+            continue
+        for student_id in candidatestudents:
+            sql = "insert into videostudyrecord (vsr_id, video_id, student_id) values("
+            sql = sql + str(vsrCnt) + "," + str(video_id) + "," + str(student_id) + ");\n"
+            fp.write(sql)
+            vsrCnt = vsrCnt + 1
+            # print(video_id)
+            # print(candidatestudents)
+    print(vsrCnt)
 
     print("---DocumentStudyRecord---")
-    documentstudent = set()
-    for i in range(1, dsrCnt + 1):
-        document_id = genRandomSetMember(documents)
-        student_id = genRandomSetMember(students)
-        while (document_id, student_id) in documentstudent:
-            document_id = genRandomSetMember(documents)
-            student_id = genRandomSetMember(students)
-        documentstudent.add((document_id, student_id))
-        sql = "insert into documentstudyrecord (dsr_id, document_id, student_id) values("
-        sql = sql + str(i) + "," + str(document_id) + "," + str(student_id) + ");\n"
-        fp.write(sql)
-
+    dsrCnt = 1
+    # documentstudent=set()
+    # for i in range(1,dsrCnt+1):
+    #    document_id=genRandomSetMember(documents)
+    #    candidatestudents=studentcourses[chaptercourses[sectionchapters[coursewaresections[document_id]]]]
+    #    while candidatestudents==[]:
+    #        document_id=genRandomSetMember(documents)
+    #        candidatestudents=studentcourses[chaptercourses[sectionchapters[coursewaresections[document_id]]]]
+    #    student_id=genRandomSetMember(candidatestudents)
+    #    if (document_id,student_id) in documentstudent:
+    #        i=i-1
+    #        continue
+    #    documentstudent.add((document_id,student_id))
+    for i in range(len(documents)):
+        document_id = documents[i]
+        candidatestudents = studentcourses[chaptercourses[sectionchapters[coursewaresections[document_id]]]]
+        if candidatestudents == []:
+            continue
+        for student_id in candidatestudents:
+            sql = "insert into documentstudyrecord (dsr_id, document_id, student_id) values("
+            sql = sql + str(dsrCnt) + "," + str(document_id) + "," + str(student_id) + ");\n"
+            fp.write(sql)
+            dsrCnt = dsrCnt + 1
+    print(dsrCnt)
     print("---VideoStudyRecordItem---")
-
+    vsriCnt = vsrCnt * 2
+    dsriCnt = dsrCnt * 2
     for i in range(1, vsriCnt + 1):
-        vsr_id = genRandomInt(vsrCnt)
+        vsr_id = genRandomInt(vsrCnt - 1)
         start_position = genRandomInt(3600)
         end_position = max(start_position, genRandomInt(3600))
         sql = "insert into videostudyrecorditem (vsri_id, vsr_id, start_position, end_position) values("
@@ -299,18 +342,22 @@ if __name__ == "__main__":
     print("---DocumentStudyRecordItem---")
 
     for i in range(1, dsriCnt + 1):
-        dsr_id = genRandomInt(dsrCnt)
+        dsr_id = genRandomInt(dsrCnt - 1)
         start_page = genRandomInt(20)
         end_page = max(start_page, genRandomInt(20))
         sql = "insert into documentstudyrecorditem (dsri_id, dsr_id, start_page, end_page) values("
-        sql = sql + str(i) + "," + str(vsr_id) + "," + str(start_page) + "," + str(end_page) + ");\n"
+        sql = sql + str(i) + "," + str(dsr_id) + "," + str(start_page) + "," + str(end_page) + ");\n"
         fp.write(sql)
 
     print("---HomeworkSubmitRecord---")
-
+    print(hsrCnt)
     for i in range(1, hsrCnt + 1):
         homework_id = genRandomSetMember(homeworks)
-        student_id = genRandomSetMember(students)
+        candidatestudents = studentcourses[chaptercourses[sectionchapters[coursewaresections[homework_id]]]]
+        while candidatestudents == []:
+            homework_id = genRandomSetMember(homeworks)
+            candidatestudents = studentcourses[chaptercourses[sectionchapters[coursewaresections[homework_id]]]]
+        student_id = genRandomSetMember(candidatestudents)
         is_submitted = random.randint(0, 1)
         score = genRandomInt(100)
         sql = "insert into homeworksubmitrecord (hsr_id, homework_id, student_id, is_submitted, score) values("
@@ -342,5 +389,4 @@ if __name__ == "__main__":
         sql = sql + str(hsr_id) + "," + str(problem_id) + "," + answer + "," + str(time_cost) + ");\n"
         fp.write(sql)
 
-    fp.write("commit;\n")
     fp.close()
